@@ -4,7 +4,6 @@ using System.Security.Cryptography;
 var builder = WebApplication.CreateBuilder(args);
 
 var fileStorageUrl = builder.Configuration["FILESTORAGE_URL"]
-                     ?? Environment.GetEnvironmentVariable("FILESTORAGE_URL")
                      ?? "ERROR";
 
 builder.Services.AddHttpClient<IFileStorageClient, FileStorageClient>(client =>

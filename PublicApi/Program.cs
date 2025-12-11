@@ -7,11 +7,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // URL внутренних сервисов берём из конфигурации или env
 var fileStorageUrl = builder.Configuration["FILESTORAGE_URL"]
-                     ?? Environment.GetEnvironmentVariable("FILESTORAGE_URL")
                      ?? "ERROR";
 
 var checkerUrl = builder.Configuration["CHECKER_URL"]
-                 ?? Environment.GetEnvironmentVariable("CHECKER_URL")
                  ?? "ERROR";
 
 builder.Services.AddHttpClient<IFileStorageApiClient, FileStorageApiClient>(client =>
