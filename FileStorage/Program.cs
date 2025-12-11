@@ -32,6 +32,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // Простое файловое хранилище в папке ./storage
+// TODO: Поменять на S3
 var storageRoot = Path.Combine(AppContext.BaseDirectory, "work_storage");
 Directory.CreateDirectory(storageRoot);
 
@@ -68,7 +69,8 @@ app.MapGet("/internal/files/{fileId}", async (string fileId) =>
         }
 
         var bytes = await File.ReadAllBytesAsync(filePath);
-        return Results.File(bytes, "application/text/plain");
+        // Можно попробовать оставить text/plain, но по умолчанию:
+        return Results.File(bytes, "application/octet-stream");
     })
     .WithName("GetFileInternal")
     .WithOpenApi().DisableAntiforgery();

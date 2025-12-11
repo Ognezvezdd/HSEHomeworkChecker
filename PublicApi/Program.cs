@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
 using PublicApi;
+using Microsoft.AspNetCore.WebUtilities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -142,7 +143,7 @@ app.MapGet("/api/works/{workId:guid}/reports", async (
         catch (Exception ex)
         {
             return Results.Problem(
-                title: $"Внутренняя ошибка PublicApi при выполнении команды /api/works/{workId:guid}/reports",
+                title: $"Внутренняя ошибка PublicApi при выполнении команды /api/works/{workId}/reports",
                 detail: ex.Message,
                 statusCode: StatusCodes.Status500InternalServerError);
         }
@@ -200,19 +201,72 @@ app.MapGet("/api/assignments/{assignmentId}/reports", async (
     .Produces(StatusCodes.Status500InternalServerError)
     .WithOpenApi().DisableAntiforgery();
 
-app.MapGet("/api/works/{workId}/wordcloud", async (
-            [FromForm] UploadWorkForm form,
-            IFileStorageApiClient storageClient,
-            ICheckerApiClient checkerClient,
-            CancellationToken ct) =>
+
+app.MapGet("/api/works/{workId:guid}/wordCloud", async (
+        Guid workId,
+        IFileStorageApiClient storageClient,
+        IHttpClientFactory httpClientFactory,
+        CancellationToken ct) =>
+    {
+        try
         {
+            var reports = await storageClient.GetText(workId, ct);
+            if (reports.Length == 0)
+            {
+                return Results.NotFound();
+            }
+
+            var text = string.Join(" ", reports);
+
+            var queryParams = new Dictionary<string, string?>
+            {
+                ["text"] = text,
+                ["format"] = "png",
+            };
+
+            var url = QueryHelpers.AddQueryString("https://quickchart.io/", queryParams);
+            var httpClient = httpClientFactory.CreateClient("chart");
+
+            var response = await httpClient.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return Results.Problem(
+                    title: "Не удалось получить картинку от QuickChart",
+                    detail: $"Status code: {(int)response.StatusCode}",
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+
+            var imageBytes = await response.Content.ReadAsByteArrayAsync(ct);
+
+            return Results.File(imageBytes, "image/png");
         }
-    ).WithName("Wordcloud")
-    .WithOpenApi().DisableAntiforgery();
+        catch (HttpRequestException)
+        {
+            return Results.Problem(
+                title: "Сервис проверки временно недоступен",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem(
+                title: $"Внутренняя ошибка PublicApi при выполнении команды /api/works/{workId}/wordCloud",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+    })
+    .WithName("WordCloud")
+    .WithSummary("Выдает картинку по самым частым словам")
+    .WithDescription("Выдает картинку по самым частым словам")
+    .Produces(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status404NotFound)
+    .Produces(StatusCodes.Status503ServiceUnavailable)
+    .Produces(StatusCodes.Status500InternalServerError)
+    .WithOpenApi()
+    .DisableAntiforgery();
 
 
 app.MapGet("/status", () => Results.Ok("PublicApi OK"))
-    .WithName("PublicApistatus")
+    .WithName("PublicApiStatus")
     .WithOpenApi().DisableAntiforgery();
 
 

@@ -53,6 +53,12 @@ namespace PublicApi
         int PlagiarismScore,
         DateTime CreatedAt);
 
+    public record FileTextDto(
+        Guid WorkId,
+        string FileId,
+        string FileText
+    );
+
     public record AssignmentSummaryDto(
         string AssignmentId,
         int TotalWorks,
@@ -61,10 +67,16 @@ namespace PublicApi
 
 // === Клиенты внутренних сервисов ===
 
-    public interface IFileStorageApiClient
+    public interface IFileGetTextClient
+    {
+        public Task<string> GetText(Guid workId, CancellationToken ct = default);
+    }
+
+    public interface IFileStorageApiClient : IFileGetTextClient
     {
         Task<string> UploadAsync(IFormFile file, CancellationToken ct = default);
     }
+
 
     public sealed class FileStorageApiClient : IFileStorageApiClient
     {
@@ -96,6 +108,19 @@ namespace PublicApi
             }
 
             throw new InvalidOperationException("fileId not found in response");
+        }
+
+        public async Task<string> GetText(Guid fileId, CancellationToken ct = default)
+        {
+            var file = fileId.ToString("N");
+            using var content = new MultipartFormDataContent(file);
+            var response = await _http.PostAsync("/internal/files", content, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"FileStorage returned {(int)response.StatusCode}");
+            }
+
+            return response.ToString();
         }
     }
 
@@ -166,7 +191,7 @@ namespace PublicApi
 // DTO для multipart/form-data
     public sealed class UploadWorkForm
     {
-        public IFormFile File { get; set; } = default!;
+        public IFormFile File { get; set; } = null!;
 
         public string StudentId { get; set; } = string.Empty;
 
