@@ -1,7 +1,8 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.OpenApi.Models;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,15 +18,29 @@ builder.Services.AddHttpClient<IFileStorageApiClient, FileStorageApiClient>(clie
     client.BaseAddress = new Uri(fileStorageUrl);
 });
 
-builder.Services.AddHttpClient<ICheckerApiClient, CheckerApiClient>(client =>
+// Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
 {
-    client.BaseAddress = new Uri(checkerUrl);
+    c.SwaggerDoc("v1",
+        new OpenApiInfo
+        {
+            Title = "HSE AntiPlagiarism Public API",
+            Version = "v1",
+            Description = "Шлюз: принимает запросы от клиентов и проксирует их в FileStorage и Checker"
+        });
 });
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Public API v1");
+    });
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -38,7 +53,7 @@ app.UseHttpsRedirection();
 
 // === Эндпоинты Public API ===
 
-app.MapPost("/api/works", async (
+app.MapPost("/api/works/submit", async (
         [FromForm] UploadWorkForm form,
         IFileStorageApiClient storageClient,
         ICheckerApiClient checkerClient,
@@ -79,6 +94,10 @@ app.MapPost("/api/works", async (
         }
     })
     .WithName("UploadWork")
+    .WithSummary("Отправить работу на проверку")
+    .WithDescription("Принимает файл работы и метаданные (студент, задание), сохраняет файл и запускает анализ на плагиат.")
+    .Produces(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status400BadRequest)
     .WithOpenApi()
     .DisableAntiforgery();
 
@@ -149,7 +168,8 @@ app.MapGet("/api/assignments/{assignmentId}/reports", async (
 
 app.MapGet("/health", () => Results.Ok("PublicApi OK"))
     .WithName("PublicApiHealth")
-    .WithOpenApi().DisableAntiforgery();;
+    .WithOpenApi().DisableAntiforgery();
+;
 
 app.Run();
 

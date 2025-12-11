@@ -1,3 +1,4 @@
+using Microsoft.OpenApi.Models;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 
@@ -15,7 +16,16 @@ builder.Services.AddSingleton<IWorkStore, InMemoryWorkStore>();
 builder.Services.AddSingleton<IPlagiarismDetector, PlagiarismDetector>();
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1",
+        new OpenApiInfo
+        {
+            Title = "HSE AntiPlagiarism Checker",
+            Version = "v1",
+            Description = "Микросервис проверки работ и формирования отчётов"
+        });
+});
 
 var app = builder.Build();
 
@@ -78,7 +88,8 @@ app.MapPost("/internal/works", async (
         return Results.Ok(new CreateWorkResponse(work.WorkId, report.ReportId, report.IsPlagiarism));
     })
     .WithName("CreateWorkInternal")
-    .WithOpenApi().DisableAntiforgery();;
+    .WithOpenApi().DisableAntiforgery();
+;
 
 // Получить отчёты по конкретной работе
 app.MapGet("/internal/works/{workId:guid}/reports", (Guid workId, IWorkStore store) =>
@@ -110,7 +121,8 @@ app.MapGet("/internal/works/{workId:guid}/reports", (Guid workId, IWorkStore sto
         return Results.Ok(dtos);
     })
     .WithName("GetReportsForWorkInternal")
-    .WithOpenApi().DisableAntiforgery();;
+    .WithOpenApi().DisableAntiforgery();
+;
 
 // Сводка по заданию
 app.MapGet("/internal/assignments/{assignmentId}/reports", (string assignmentId, IWorkStore store) =>
@@ -128,11 +140,13 @@ app.MapGet("/internal/assignments/{assignmentId}/reports", (string assignmentId,
         return Results.Ok(dto);
     })
     .WithName("GetAssignmentSummaryInternal")
-    .WithOpenApi().DisableAntiforgery();;
+    .WithOpenApi().DisableAntiforgery();
+;
 
 app.MapGet("/health", () => Results.Ok("Checker OK"))
     .WithName("CheckerHealth")
-    .WithOpenApi().DisableAntiforgery();;
+    .WithOpenApi().DisableAntiforgery();
+;
 
 app.Run();
 

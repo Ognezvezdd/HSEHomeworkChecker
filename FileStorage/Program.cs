@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,8 +11,16 @@ builder.Services.Configure<FormOptions>(opt =>
 });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1",
+        new OpenApiInfo
+        {
+            Title = "HSE AntiPlagiarism File Storage",
+            Version = "v1",
+            Description = "Микросервис хранения файлов (работ студентов)"
+        });
+});
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -46,7 +55,8 @@ app.MapPost("/internal/files", async (IFormFile file) =>
         return Results.Ok(new FileUploadResponse(fileId));
     })
     .WithName("UploadFileInternal")
-    .WithOpenApi().DisableAntiforgery();;
+    .WithOpenApi().DisableAntiforgery();
+;
 
 // Внутренний эндпоинт: получить содержимое файла (для Checker)
 app.MapGet("/internal/files/{fileId}", async (string fileId) =>
@@ -62,12 +72,14 @@ app.MapGet("/internal/files/{fileId}", async (string fileId) =>
         return Results.File(bytes, "application/octet-stream");
     })
     .WithName("GetFileInternal")
-    .WithOpenApi().DisableAntiforgery();;
+    .WithOpenApi().DisableAntiforgery();
+;
 
 // Для проверки сервиса в Swagger (не обязательно использовать)
 app.MapGet("/health", () => Results.Ok("FileStorage OK"))
     .WithName("FileStorageHealth")
-    .WithOpenApi().DisableAntiforgery();;
+    .WithOpenApi().DisableAntiforgery();
+;
 
 app.Run();
 
