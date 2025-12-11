@@ -31,7 +31,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1",
         new OpenApiInfo
         {
-            Title = "HSE AntiPlagiarism Public API",
+            Title = "HSEHomeworkChecker Public API",
             Version = "v1",
             Description = "Шлюз: принимает запросы от клиентов и проксирует их в FileStorage и Checker"
         });
@@ -81,7 +81,8 @@ app.MapPost("/api/works/submit", async (
             var publicResponse = new PublicCreateWorkResponse(
                 response.WorkId,
                 response.ReportId,
-                response.IsPlagiarism);
+                response.IsPlagiarism,
+                fileId);
 
             return Results.Ok(publicResponse);
         }

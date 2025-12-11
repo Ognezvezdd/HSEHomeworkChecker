@@ -1,3 +1,4 @@
+using FileStorage;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.OpenApi.Models;
 
@@ -15,7 +16,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1",
         new OpenApiInfo
         {
-            Title = "HSE AntiPlagiarism File Storage",
+            Title = "HSEHomeworkChecker File Storage",
             Version = "v1",
             Description = "Микросервис хранения файлов (работ студентов)"
         });
@@ -35,7 +36,7 @@ var storageRoot = Path.Combine(AppContext.BaseDirectory, "work_storage");
 Directory.CreateDirectory(storageRoot);
 
 
-// Внутренний эндпоинт для других микросервисов: загрузка файла
+// Внутренний api для других микросервисов: загрузка файла
 app.MapPost("/internal/files", async (IFormFile file) =>
     {
         if (file.Length == 0)
@@ -57,7 +58,7 @@ app.MapPost("/internal/files", async (IFormFile file) =>
     .WithOpenApi().DisableAntiforgery();
 ;
 
-// Внутренний эндпоинт: получить содержимое файла (для Checker)
+// Внутренний api: получить содержимое файла (для Checker)
 app.MapGet("/internal/files/{fileId}", async (string fileId) =>
     {
         var filePath = Path.Combine(storageRoot, fileId);
@@ -73,13 +74,9 @@ app.MapGet("/internal/files/{fileId}", async (string fileId) =>
     .WithOpenApi().DisableAntiforgery();
 ;
 
-// Для проверки сервиса в Swagger (не обязательно использовать)
 app.MapGet("/status", () => Results.Ok("FileStorage OK"))
     .WithName("FileStoragestatus")
     .WithOpenApi().DisableAntiforgery();
 ;
 
 app.Run();
-
-// DTO для ответа при загрузке файла
-public record FileUploadResponse(string FileId);

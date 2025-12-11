@@ -6,7 +6,11 @@ namespace PublicApi
 {
 // === DTO для Public API ===
 
-    public record PublicCreateWorkResponse(Guid WorkId, Guid ReportId, bool IsPlagiarism);
+    public record PublicCreateWorkResponse(
+        Guid WorkId,
+        Guid ReportId,
+        bool IsPlagiarism,
+        string FileId);
 
     public record PublicWorkReportDto(
         Guid ReportId,

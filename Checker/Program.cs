@@ -21,7 +21,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1",
         new OpenApiInfo
         {
-            Title = "HSE AntiPlagiarism Checker",
+            Title = "HSEHomeworkChecker Checker",
             Version = "v1",
             Description = "Микросервис проверки работ и формирования отчётов"
         });
