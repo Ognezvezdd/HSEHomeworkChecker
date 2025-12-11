@@ -8,15 +8,21 @@ var builder = WebApplication.CreateBuilder(args);
 
 // URL внутренних сервисов берём из конфигурации или env
 var fileStorageUrl = builder.Configuration["FILESTORAGE_URL"]
-                     ?? "ERROR";
+                     ?? throw new InvalidOperationException("Добавьте FILESTORAGE_URL в appsettings.Development.json");
+
 
 var checkerUrl = builder.Configuration["CHECKER_URL"]
-                 ?? "ERROR";
+                 ?? throw new InvalidOperationException("Добавьте CHECKER_URL в appsettings.Development.json");
 
 builder.Services.AddHttpClient<IFileStorageApiClient, FileStorageApiClient>(client =>
 {
     client.BaseAddress = new Uri(fileStorageUrl);
 });
+builder.Services.AddHttpClient<ICheckerApiClient, CheckerApiClient>(client =>
+{
+    client.BaseAddress = new Uri(checkerUrl);
+});
+
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -42,12 +48,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
 app.UseHttpsRedirection();
 
 
@@ -61,7 +61,7 @@ app.MapPost("/api/works/submit", async (
     {
         var file = form.File;
 
-        if (file == null || file.Length == 0)
+        if (file.Length == 0)
         {
             return Results.BadRequest("Empty file");
         }
@@ -88,14 +88,24 @@ app.MapPost("/api/works/submit", async (
 
             return Results.Ok(publicResponse);
         }
+        catch (HttpRequestException)
+        {
+            return Results.Problem(
+                title: "Внутренний сервис недоступен",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
         catch (Exception ex)
         {
-            return Results.Problem($"Failed to process work: {ex.Message}");
+            return Results.Problem(
+                title: "Внутренняя ошибка PublicApi при выполнении команды /api/works/submit",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
         }
     })
     .WithName("UploadWork")
     .WithSummary("Отправить работу на проверку")
-    .WithDescription("Принимает файл работы и метаданные (студент, задание), сохраняет файл и запускает анализ на плагиат.")
+    .WithDescription(
+        "Принимает файл работы и метаданные (студент, задание), сохраняет файл и запускает анализ на плагиат.")
     .Produces(StatusCodes.Status200OK)
     .Produces(StatusCodes.Status400BadRequest)
     .WithOpenApi()
@@ -128,16 +138,31 @@ app.MapGet("/api/works/{workId:guid}/reports", async (
 
             return Results.Ok(dtos);
         }
+        catch (HttpRequestException)
+        {
+            // Checker недоступен: возвращаем 503
+            return Results.Problem(
+                title: "Сервис проверки временно недоступен",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
         catch (Exception ex)
         {
-            return Results.Problem($"Failed to load reports: {ex.Message}");
+            return Results.Problem(
+                title: $"Внутренняя ошибка PublicApi при выполнении команды /api/works/{workId:guid}/reports",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
         }
     })
-    .WithName("GetWorkReports")
+    .WithName("GetWorkReport")
+    .WithSummary("Получить отчёт по работе")
+    .WithDescription("Возвращает JSON-отчёт по конкретной работе. Если Checker недоступен, вернёт 503.")
+    .Produces(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status404NotFound)
+    .Produces(StatusCodes.Status503ServiceUnavailable)
+    .Produces(StatusCodes.Status500InternalServerError)
     .WithOpenApi().DisableAntiforgery();
 ;
 
-// Сводка по заданию (assignment): преподаватель
 app.MapGet("/api/assignments/{assignmentId}/reports", async (
         string assignmentId,
         ICheckerApiClient checkerClient,
@@ -158,16 +183,32 @@ app.MapGet("/api/assignments/{assignmentId}/reports", async (
 
             return Results.Ok(dto);
         }
+        catch (HttpRequestException)
+        {
+            // Checker недоступен: возвращаем 503
+            return Results.Problem(
+                title: "Сервис проверки временно недоступен",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
         catch (Exception ex)
         {
-            return Results.Problem($"Failed to load assignment summary: {ex.Message}");
+            return Results.Problem(
+                title: $"Внутренняя ошибка PublicApi при выполнении команды /api/assignments/{assignmentId}/reports",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
         }
     })
     .WithName("GetAssignmentSummary")
-    .WithOpenApi();
+    .WithSummary("Сводка по заданию (assignment): преподаватель")
+    .WithDescription("Возвращает JSON-отчёт для преподавателя. Если Checker недоступен, вернёт 503.")
+    .Produces(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status404NotFound)
+    .Produces(StatusCodes.Status503ServiceUnavailable)
+    .Produces(StatusCodes.Status500InternalServerError)
+    .WithOpenApi().DisableAntiforgery();
 
-app.MapGet("/health", () => Results.Ok("PublicApi OK"))
-    .WithName("PublicApiHealth")
+app.MapGet("/status", () => Results.Ok("PublicApi OK"))
+    .WithName("PublicApistatus")
     .WithOpenApi().DisableAntiforgery();
 ;
 

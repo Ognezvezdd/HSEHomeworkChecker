@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.OpenApi.Models;
 
@@ -32,7 +31,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // Простое файловое хранилище в папке ./storage
-var storageRoot = Path.Combine(AppContext.BaseDirectory, "storage");
+var storageRoot = Path.Combine(AppContext.BaseDirectory, "work_storage");
 Directory.CreateDirectory(storageRoot);
 
 
@@ -76,8 +75,8 @@ app.MapGet("/internal/files/{fileId}", async (string fileId) =>
 ;
 
 // Для проверки сервиса в Swagger (не обязательно использовать)
-app.MapGet("/health", () => Results.Ok("FileStorage OK"))
-    .WithName("FileStorageHealth")
+app.MapGet("/status", () => Results.Ok("FileStorage OK"))
+    .WithName("FileStoragestatus")
     .WithOpenApi().DisableAntiforgery();
 ;
 

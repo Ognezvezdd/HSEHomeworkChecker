@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 var builder = WebApplication.CreateBuilder(args);
 
 var fileStorageUrl = builder.Configuration["FILESTORAGE_URL"]
-                     ?? "ERROR";
+                     ?? throw new InvalidOperationException("Добавьте FILESTORAGE_URL в appsettings.Development.json");
 
 builder.Services.AddHttpClient<IFileStorageClient, FileStorageClient>(client =>
 {
@@ -143,8 +143,8 @@ app.MapGet("/internal/assignments/{assignmentId}/reports", (string assignmentId,
     .WithOpenApi().DisableAntiforgery();
 ;
 
-app.MapGet("/health", () => Results.Ok("Checker OK"))
-    .WithName("CheckerHealth")
+app.MapGet("/status", () => Results.Ok("Checker OK"))
+    .WithName("Checkerstatus")
     .WithOpenApi().DisableAntiforgery();
 ;
 
