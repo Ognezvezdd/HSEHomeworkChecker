@@ -1,0 +1,53 @@
+﻿services:
+  file-storage:
+    build:
+      context: ./FileStorage
+      dockerfile: Dockerfile
+    container_name: file-storage
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "5020:8080"
+    networks:
+      - app-net
+
+  checker:
+    build:
+      context: ./Checker
+      dockerfile: Dockerfile
+    container_name: checker
+    depends_on:
+      - file-storage
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+      # адрес FileStorage ВНУТРИ docker-сети: имя сервиса = "file-storage"
+      - FILE_STORAGE_URL=http://file-storage:8080
+    ports:
+      - "5010:8080"
+    networks:
+      - app-net
+
+  public-api:
+    build:
+      context: ./PublicApi
+      dockerfile: Dockerfile
+    container_name: public-api
+    depends_on:
+      - file-storage
+      - checker
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+      # эти переменные ты читаешь внутри PublicApi и прокидываешь в HttpClient
+      - FILE_STORAGE_URL=http://file-storage:8080
+      - CHECKER_URL=http://checker:8080
+    ports:
+      - "5000:8080"
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge

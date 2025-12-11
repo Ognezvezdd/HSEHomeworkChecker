@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// URL FileStorage берём из конфигурации или env, по умолчанию localhost:5001
 var fileStorageUrl = builder.Configuration["FILESTORAGE_URL"]
                      ?? Environment.GetEnvironmentVariable("FILESTORAGE_URL")
                      ?? "ERROR";
@@ -36,6 +35,7 @@ if (app.Environment.IsDevelopment())
 // === Эндпоинты Checker ===
 
 // Создание работы и отчёта (внутренний API)
+// TODO Починить, сейчас не работает
 app.MapPost("/internal/works", async (
         CreateWorkRequest request,
         IFileStorageClient storageClient,
