@@ -1,95 +1,324 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
-using PublicApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.UseUrls("http://localhost:5000");
+// URL внутренних сервисов берём из конфигурации или env
+var fileStorageUrl = builder.Configuration["FILESTORAGE_URL"]
+                     ?? Environment.GetEnvironmentVariable("FILESTORAGE_URL")
+                     ?? "ERROR";
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+var checkerUrl = builder.Configuration["CHECKER_URL"]
+                 ?? Environment.GetEnvironmentVariable("CHECKER_URL")
+                 ?? "ERROR";
+
+builder.Services.AddHttpClient<IFileStorageApiClient, FileStorageApiClient>(client =>
+{
+    client.BaseAddress = new Uri(fileStorageUrl);
+});
+
+builder.Services.AddHttpClient<ICheckerApiClient, CheckerApiClient>(client =>
+{
+    client.BaseAddress = new Uri(checkerUrl);
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// TODO: сюда позже добавлять HttpClient для вызова FileStorage и Checker
-// builder.Services.AddHttpClient("FileStorage", ...);
-// builder.Services.AddHttpClient("Checker", ...);
-
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// app.UseHttpsRedirection();
+app.UseHttpsRedirection();
 
-// Внешний сценарий: студент загружает работу
-// Теперь один параметр из тела: [FromForm] UploadWorkRequest request.
-// Swagger видит ОДНО тело запроса и больше не падает.
+
+// === Эндпоинты Public API ===
+
 app.MapPost("/api/works", async (
-        [FromForm] UploadWorkRequest request) =>
+        [FromForm] UploadWorkForm form,
+        IFileStorageApiClient storageClient,
+        ICheckerApiClient checkerClient,
+        CancellationToken ct) =>
     {
-        if (request.File is null || request.File.Length == 0)
+        var file = form.File;
+
+        if (file == null || file.Length == 0)
         {
-            return Results.BadRequest("Файл не передан или пустой");
+            return Results.BadRequest("Empty file");
         }
 
-        // TODO: здесь будет:
-        // 1) вызов FileStorage: POST /internal/files → получить fileId
-        // 2) вызов Checker: POST /internal/works → получить workId, reportId
+        try
+        {
+            // 1) Загружаем файл в FileStorage
+            var fileId = await storageClient.UploadAsync(file, ct);
 
-        // Сейчас просто делаем фейковые id, чтобы endpoint работал.
-        var fakeFileId = Guid.NewGuid(); // пока никуда не передаём, просто заглушка
-        var fakeWorkId = Guid.NewGuid();
-        var fakeReportId = Guid.NewGuid();
+            // 2) Создаём "работу" в Checker
+            var createRequest = new CreateWorkRequest(
+                form.StudentId,
+                form.StudentName,
+                form.AssignmentId,
+                fileId);
 
-        var response = new PublicWorkCreatedResponse(
-            fakeWorkId,
-            fakeReportId,
-            "Completed",
-            DateTimeOffset.UtcNow);
+            var response = await checkerClient.CreateWorkAsync(createRequest, ct);
 
-        return Results.Ok(response);
+            // 3) Возвращаем ответ наружу
+            var publicResponse = new PublicCreateWorkResponse(
+                response.WorkId,
+                response.ReportId,
+                response.IsPlagiarism);
+
+            return Results.Ok(publicResponse);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Failed to process work: {ex.Message}");
+        }
     })
     .WithName("UploadWork")
-    .WithOpenApi();
+    .WithOpenApi()
+    .DisableAntiforgery();
 
-// Получить отчёты по работе (преподавательский сценарий)
-// TODO: здесь позже дергать Checker: GET /internal/works/{id}/reports
-app.MapGet("/api/works/{workId:guid}/reports", (Guid workId) =>
+// Получить отчёты по конкретной работе: преподаватель
+app.MapGet("/api/works/{workId:guid}/reports", async (
+        Guid workId,
+        ICheckerApiClient checkerClient,
+        CancellationToken ct) =>
     {
-        // Временно отдаём фейковый отчёт, чтобы маршрут работал.
-        var fakeReport = new PublicReportDto(
-            Guid.NewGuid(),
-            workId,
-            false,
-            0.0,
-            null,
-            DateTimeOffset.UtcNow);
+        try
+        {
+            var reports = await checkerClient.GetReportsForWorkAsync(workId, ct);
+            if (reports.Count == 0)
+            {
+                return Results.NotFound();
+            }
 
-        return Results.Ok(new[] { fakeReport });
+            var dtos = reports.Select(r => new PublicWorkReportDto(
+                r.ReportId,
+                r.WorkId,
+                r.StudentId,
+                r.StudentName,
+                r.AssignmentId,
+                r.IsPlagiarism,
+                r.SourceWorkId,
+                r.PlagiarismScore,
+                r.CreatedAt)).ToList();
+
+            return Results.Ok(dtos);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Failed to load reports: {ex.Message}");
+        }
     })
     .WithName("GetWorkReports")
-    .WithOpenApi();
+    .WithOpenApi().DisableAntiforgery();
+;
 
-// Простая аналитика по заданию
-// TODO: здесь позже дергать Checker: GET /internal/assignments/{assignmentId}/reports
-app.MapGet("/api/assignments/{assignmentId}/reports", (string assignmentId) =>
+// Сводка по заданию (assignment): преподаватель
+app.MapGet("/api/assignments/{assignmentId}/reports", async (
+        string assignmentId,
+        ICheckerApiClient checkerClient,
+        CancellationToken ct) =>
     {
-        var summary = new PublicAssignmentSummaryDto(
-            assignmentId,
-            0,
-            0);
+        try
+        {
+            var summary = await checkerClient.GetAssignmentSummaryAsync(assignmentId, ct);
+            if (summary is null)
+            {
+                return Results.NotFound();
+            }
 
-        return Results.Ok(summary);
+            var dto = new PublicAssignmentSummaryDto(
+                summary.AssignmentId,
+                summary.TotalWorks,
+                summary.PlagiarisedCount);
+
+            return Results.Ok(dto);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Failed to load assignment summary: {ex.Message}");
+        }
     })
-    .WithName("GetAssignmentReports")
+    .WithName("GetAssignmentSummary")
     .WithOpenApi();
 
-app.MapGet("/api/status", () => Results.Ok("All OK!"))
-    .WithName("GetStatus")
-    .WithOpenApi();
+app.MapGet("/health", () => Results.Ok("PublicApi OK"))
+    .WithName("PublicApiHealth")
+    .WithOpenApi().DisableAntiforgery();;
 
 app.Run();
+
+
+// === DTO для Public API ===
+
+public record PublicCreateWorkResponse(Guid WorkId, Guid ReportId, bool IsPlagiarism);
+
+public record PublicWorkReportDto(
+    Guid ReportId,
+    Guid WorkId,
+    string StudentId,
+    string StudentName,
+    string AssignmentId,
+    bool IsPlagiarism,
+    Guid? SourceWorkId,
+    int PlagiarismScore,
+    DateTime CreatedAt);
+
+public record PublicAssignmentSummaryDto(
+    string AssignmentId,
+    int TotalWorks,
+    int PlagiarisedCount);
+
+
+// === Контракты внутренних сервисов (Checker) ===
+
+public record CreateWorkRequest(
+    string StudentId,
+    string StudentName,
+    string AssignmentId,
+    string FileId);
+
+public record CreateWorkResponse(
+    Guid WorkId,
+    Guid ReportId,
+    bool IsPlagiarism);
+
+public record WorkReportDto(
+    Guid ReportId,
+    Guid WorkId,
+    string StudentId,
+    string StudentName,
+    string AssignmentId,
+    bool IsPlagiarism,
+    Guid? SourceWorkId,
+    int PlagiarismScore,
+    DateTime CreatedAt);
+
+public record AssignmentSummaryDto(
+    string AssignmentId,
+    int TotalWorks,
+    int PlagiarisedCount);
+
+
+// === Клиенты внутренних сервисов ===
+
+public interface IFileStorageApiClient
+{
+    Task<string> UploadAsync(IFormFile file, CancellationToken ct = default);
+}
+
+public sealed class FileStorageApiClient : IFileStorageApiClient
+{
+    private readonly HttpClient _http;
+
+    public FileStorageApiClient(HttpClient http)
+    {
+        _http = http;
+    }
+
+    public async Task<string> UploadAsync(IFormFile file, CancellationToken ct = default)
+    {
+        using var content = new MultipartFormDataContent();
+        var fileContent = new StreamContent(file.OpenReadStream());
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+        content.Add(fileContent, "file", file.FileName);
+
+        var response = await _http.PostAsync("/internal/files", content, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"FileStorage returned {(int)response.StatusCode}");
+        }
+
+        var json = await response.Content.ReadAsStringAsync(ct);
+        var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("fileId", out var idProp))
+        {
+            return idProp.GetString() ?? throw new InvalidOperationException("fileId is null");
+        }
+
+        throw new InvalidOperationException("fileId not found in response");
+    }
+}
+
+public interface ICheckerApiClient
+{
+    Task<CreateWorkResponse> CreateWorkAsync(CreateWorkRequest request, CancellationToken ct = default);
+    Task<List<WorkReportDto>> GetReportsForWorkAsync(Guid workId, CancellationToken ct = default);
+    Task<AssignmentSummaryDto?> GetAssignmentSummaryAsync(string assignmentId, CancellationToken ct = default);
+}
+
+public sealed class CheckerApiClient : ICheckerApiClient
+{
+    private readonly HttpClient _http;
+
+    public CheckerApiClient(HttpClient http)
+    {
+        _http = http;
+    }
+
+    public async Task<CreateWorkResponse> CreateWorkAsync(CreateWorkRequest request, CancellationToken ct = default)
+    {
+        var response = await _http.PostAsJsonAsync("/internal/works", request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"Checker returned {(int)response.StatusCode}");
+        }
+
+        var dto = await response.Content.ReadFromJsonAsync<CreateWorkResponse>(ct);
+        return dto ?? throw new InvalidOperationException("Empty response from Checker");
+    }
+
+    public async Task<List<WorkReportDto>> GetReportsForWorkAsync(Guid workId, CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"/internal/works/{workId}/reports", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return new List<WorkReportDto>();
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"Checker returned {(int)response.StatusCode}");
+        }
+
+        var list = await response.Content.ReadFromJsonAsync<List<WorkReportDto>>(ct);
+        return list ?? new List<WorkReportDto>();
+    }
+
+    public async Task<AssignmentSummaryDto?> GetAssignmentSummaryAsync(string assignmentId,
+        CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"/internal/assignments/{assignmentId}/reports", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"Checker returned {(int)response.StatusCode}");
+        }
+
+        var dto = await response.Content.ReadFromJsonAsync<AssignmentSummaryDto>(ct);
+        return dto;
+    }
+}
+
+// DTO для multipart/form-data
+public sealed class UploadWorkForm
+{
+    public IFormFile File { get; set; } = default!;
+
+    public string StudentId { get; set; } = string.Empty;
+
+    public string StudentName { get; set; } = string.Empty;
+
+    public string AssignmentId { get; set; } = string.Empty;
+}

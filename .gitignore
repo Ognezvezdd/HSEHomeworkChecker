@@ -9,6 +9,6 @@ Checker/obj/**
 FileStorage/bin/**
 FileStorage/obj/**
 
-Checker/appsettings.Development.json
-FileStorage/appsettings.Development.json
-PublicApi/appsettings.Development.json
+#Checker/appsettings.Development.json
+#FileStorage/appsettings.Development.json
+#PublicApi/appsettings.Development.json

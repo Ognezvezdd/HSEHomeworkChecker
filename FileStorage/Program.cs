@@ -1,87 +1,75 @@
-var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.UseUrls("http://localhost:5020");
+using System.Text;
+using Microsoft.AspNetCore.Http.Features;
 
-// Add services to the container.
+var builder = WebApplication.CreateBuilder(args);
+
+// Настройки для загрузки больших файлов при необходимости
+builder.Services.Configure<FormOptions>(opt =>
+{
+    opt.MultipartBodyLengthLimit = 1024L * 1024L * 100; // 100 MB
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// app.UseHttpsRedirection();
+app.UseHttpsRedirection();
 
-// Простое файловое хранилище: кладём файлы на диск в папку "storage"
+// Простое файловое хранилище в папке ./storage
 var storageRoot = Path.Combine(AppContext.BaseDirectory, "storage");
 Directory.CreateDirectory(storageRoot);
 
-// Загрузка файла
+
+// Внутренний эндпоинт для других микросервисов: загрузка файла
 app.MapPost("/internal/files", async (IFormFile file) =>
     {
-        if (file is null || file.Length == 0)
+        if (file.Length == 0)
         {
-            return Results.BadRequest("Файл не передан или пустой");
+            return Results.BadRequest("Empty file");
         }
 
-        var id = Guid.NewGuid();
-        var extension = Path.GetExtension(file.FileName);
-        var fileNameOnDisk = id + extension;
-        var fullPath = Path.Combine(storageRoot, fileNameOnDisk);
+        var fileId = Guid.NewGuid().ToString("N");
+        var filePath = Path.Combine(storageRoot, fileId);
 
-        await using (var stream = File.Create(fullPath))
+        await using (var stream = File.Create(filePath))
         {
             await file.CopyToAsync(stream);
         }
 
-        var info = new StoredFileInfo(
-            id,
-            file.FileName,
-            file.ContentType,
-            file.Length,
-            fullPath
-        );
-
-        return Results.Ok(info);
+        return Results.Ok(new FileUploadResponse(fileId));
     })
-    .WithName("UploadFile")
-    .WithOpenApi();
+    .WithName("UploadFileInternal")
+    .WithOpenApi().DisableAntiforgery();;
 
-// Получение файла по id
-app.MapGet("/internal/files/{fileId:guid}", (Guid fileId) =>
+// Внутренний эндпоинт: получить содержимое файла (для Checker)
+app.MapGet("/internal/files/{fileId}", async (string fileId) =>
     {
-        var path = Directory
-            .GetFiles(storageRoot)
-            .FirstOrDefault(p =>
-                Path.GetFileNameWithoutExtension(p).Equals(fileId.ToString(), StringComparison.OrdinalIgnoreCase));
-
-        if (path is null)
+        var filePath = Path.Combine(storageRoot, fileId);
+        if (!File.Exists(filePath))
         {
             return Results.NotFound();
         }
 
-        var contentType = "application/octet-stream";
-        var fileName = Path.GetFileName(path);
-
-        var stream = File.OpenRead(path);
-        return Results.File(stream, contentType, fileName);
+        var bytes = await File.ReadAllBytesAsync(filePath);
+        // Можно отдавать как text/plain, но для универсальности — octet-stream
+        return Results.File(bytes, "application/octet-stream");
     })
-    .WithName("GetFile")
-    .WithOpenApi();
+    .WithName("GetFileInternal")
+    .WithOpenApi().DisableAntiforgery();;
 
-app.MapGet("/api/status", () => Results.Ok("All OK!"))
-    .WithName("GetStatus")
-    .WithOpenApi();
+// Для проверки сервиса в Swagger (не обязательно использовать)
+app.MapGet("/health", () => Results.Ok("FileStorage OK"))
+    .WithName("FileStorageHealth")
+    .WithOpenApi().DisableAntiforgery();;
 
 app.Run();
 
-public record StoredFileInfo(
-    Guid Id,
-    string OriginalName,
-    string ContentType,
-    long Size,
-    string PathOnDisk);
+// DTO для ответа при загрузке файла
+public record FileUploadResponse(string FileId);
