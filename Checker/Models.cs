@@ -1,71 +1,176 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+
 namespace Checker
 {
-    public record CreateWorkRequest(
+    public abstract record CreateWorkRequest(
         string StudentId,
         string StudentName,
         string AssignmentId,
-        Guid FileId);
+        string FileId);
 
     public record CreateWorkResponse(
         Guid WorkId,
         Guid ReportId,
-        string Status,
-        DateTimeOffset SubmittedAt);
+        bool IsPlagiarism);
 
-    public record Work(
-        Guid Id,
+    public record WorkReportDto(
+        Guid ReportId,
+        Guid WorkId,
         string StudentId,
         string StudentName,
         string AssignmentId,
-        Guid FileId,
-        DateTimeOffset SubmittedAt);
-
-    public record Report(
-        Guid Id,
-        Guid WorkId,
         bool IsPlagiarism,
-        double PlagiarismScore,
         Guid? SourceWorkId,
-        DateTimeOffset CreatedAt);
+        int PlagiarismScore,
+        DateTime CreatedAt);
 
-    public record AssignmentSummary(
+    public record AssignmentSummaryDto(
         string AssignmentId,
         int TotalWorks,
-        int PlagiarismCount);
+        int PlagiarisedCount);
 
-    public sealed class InMemoryWorkStore
+    public record WorkEntity(
+        Guid WorkId,
+        string StudentId,
+        string StudentName,
+        string AssignmentId,
+        string FileId,
+        string FileHash,
+        DateTime CreatedAt);
+
+    public record ReportEntity(
+        Guid ReportId,
+        Guid WorkId,
+        bool IsPlagiarism,
+        Guid? SourceWorkId,
+        int PlagiarismScore,
+        DateTime CreatedAt);
+
+
+// === Хранилище работ и отчётов ===
+
+    public interface IWorkStore
     {
-        private readonly List<Report> _reports = new();
-        private readonly List<Work> _works = new();
+        WorkEntity AddWork(WorkEntity work);
+        ReportEntity AddReport(ReportEntity report);
+        IEnumerable<WorkEntity> GetAllWorks();
+        IEnumerable<ReportEntity> GetReportsForWork(Guid workId);
+        IEnumerable<(WorkEntity Work, ReportEntity Report)> GetByAssignment(string assignmentId);
+    }
 
-        public void AddWork(Work work)
+    public sealed class InMemoryWorkStore : IWorkStore
+    {
+        private readonly ConcurrentDictionary<Guid, ReportEntity> _reports = new();
+        private readonly ConcurrentDictionary<Guid, WorkEntity> _works = new();
+
+        public WorkEntity AddWork(WorkEntity work)
         {
-            _works.Add(work);
+            _works[work.WorkId] = work;
+            return work;
         }
 
-        public void AddReport(Report report)
+        public ReportEntity AddReport(ReportEntity report)
         {
-            _reports.Add(report);
+            _reports[report.ReportId] = report;
+            return report;
         }
 
-        public IEnumerable<Report> GetReportsByWork(Guid workId)
+        public IEnumerable<WorkEntity> GetAllWorks()
         {
-            return _reports.Where(r => r.WorkId == workId);
+            return _works.Values;
         }
 
-        public AssignmentSummary GetAssignmentSummary(string assignmentId)
+        public IEnumerable<ReportEntity> GetReportsForWork(Guid workId)
         {
-            var works = _works.Where(w => w.AssignmentId == assignmentId).ToList();
-            if (!works.Any())
+            return _reports.Values.Where(r => r.WorkId == workId);
+        }
+
+        public IEnumerable<(WorkEntity Work, ReportEntity Report)> GetByAssignment(string assignmentId)
+        {
+            var worksByAssignment = _works.Values.Where(w =>
+                w.AssignmentId.Equals(assignmentId, StringComparison.OrdinalIgnoreCase));
+
+            foreach (var w in worksByAssignment)
             {
-                return new AssignmentSummary(assignmentId, 0, 0);
+                var reports = _reports.Values.Where(r => r.WorkId == w.WorkId);
+                foreach (var r in reports)
+                {
+                    yield return (w, r);
+                }
+            }
+        }
+    }
+
+
+// === Клиент FileStorage ===
+
+    public interface IFileStorageClient
+    {
+        Task<byte[]> GetFileBytesAsync(string fileId, CancellationToken ct = default);
+    }
+
+    public sealed class FileStorageClient(HttpClient http) : IFileStorageClient
+    {
+        public async Task<byte[]> GetFileBytesAsync(string fileId, CancellationToken ct = default)
+        {
+            var response = await http.GetAsync($"/internal/files/{fileId}", ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"FileStorage returned {(int)response.StatusCode}");
             }
 
-            var workIds = works.Select(w => w.Id).ToHashSet();
-            var reports = _reports.Where(r => workIds.Contains(r.WorkId)).ToList();
-            var plagiarismCount = reports.Count(r => r.IsPlagiarism);
+            return await response.Content.ReadAsByteArrayAsync(ct);
+        }
+    }
 
-            return new AssignmentSummary(assignmentId, works.Count, plagiarismCount);
+
+// === Антиплагиат ===
+
+    public interface IPlagiarismDetector
+    {
+        Task<(bool isPlagiarism, WorkEntity? sourceWork, int score)> AnalyzeAsync(
+            string assignmentId,
+            string studentId,
+            string fileId,
+            IFileStorageClient storageClient,
+            IWorkStore store,
+            CancellationToken ct = default);
+    }
+
+    public sealed class PlagiarismDetector : IPlagiarismDetector
+    {
+        public async Task<(bool isPlagiarism, WorkEntity? sourceWork, int score)> AnalyzeAsync(
+            string assignmentId,
+            string studentId,
+            string fileId,
+            IFileStorageClient storageClient,
+            IWorkStore store,
+            CancellationToken ct = default)
+        {
+            var bytes = await storageClient.GetFileBytesAsync(fileId, ct);
+            var hash = ComputeHash(bytes);
+
+            var existing = store.GetAllWorks()
+                .Where(w =>
+                    w.AssignmentId.Equals(assignmentId, StringComparison.OrdinalIgnoreCase) &&
+                    w.FileHash == hash &&
+                    !w.StudentId.Equals(studentId, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(w => w.CreatedAt)
+                .FirstOrDefault();
+
+            if (existing is null)
+            {
+                return (false, null, 0);
+            }
+
+            return (true, existing, 100);
+        }
+
+        private static string ComputeHash(byte[] bytes)
+        {
+            var hash = SHA256.HashData(bytes);
+            return Convert.ToHexString(hash); // удобная текстовая форма
         }
     }
 }
