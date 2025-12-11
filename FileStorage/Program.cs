@@ -67,8 +67,7 @@ app.MapGet("/internal/files/{fileId}", async (string fileId) =>
         }
 
         var bytes = await File.ReadAllBytesAsync(filePath);
-        // Можно отдавать как text/plain, но для универсальности — octet-stream
-        return Results.File(bytes, "application/octet-stream");
+        return Results.File(bytes, "application/text/plain");
     })
     .WithName("GetFileInternal")
     .WithOpenApi().DisableAntiforgery();
