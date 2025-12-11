@@ -22,7 +22,6 @@
     environment:
       - ASPNETCORE_URLS=http://0.0.0.0:8080
       - ASPNETCORE_ENVIRONMENT=Development
-      # адрес FileStorage ВНУТРИ docker-сети: имя сервиса = "file-storage"
       - FILE_STORAGE_URL=http://file-storage:8080
     ports:
       - "5010:8080"
@@ -40,11 +39,10 @@
     environment:
       - ASPNETCORE_URLS=http://0.0.0.0:8080
       - ASPNETCORE_ENVIRONMENT=Development
-      # эти переменные ты читаешь внутри PublicApi и прокидываешь в HttpClient
       - FILE_STORAGE_URL=http://file-storage:8080
       - CHECKER_URL=http://checker:8080
     ports:
-      - "5000:8080"
+      - "5050:8080"
     networks:
       - app-net
 
