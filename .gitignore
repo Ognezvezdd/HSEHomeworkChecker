@@ -1,1 +1,10 @@
 **/.idea/**
+.idea/**
+PublicApi/bin/**
+PublicApi/obj/**
+
+Checker/bin/**
+Checker/obj/**
+
+FileStorage/bin/**
+FileStorage/obj/**
