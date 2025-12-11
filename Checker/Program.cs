@@ -35,16 +35,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// app.UseHttpsRedirection();
+// === api Checker ===
 
-
-// === API моделей ===
-
-
-// === Эндпоинты Checker ===
-
-// Создание работы и отчёта (внутренний API)
-// TODO Починить, сейчас не работает
 app.MapPost("/internal/works", async (
         CreateWorkRequest request,
         IFileStorageClient storageClient,
@@ -60,7 +52,6 @@ app.MapPost("/internal/works", async (
             store,
             ct);
 
-        // Повторно считаем хэш, чтобы сохранить его вместе с работой
         var bytes = await storageClient.GetFileBytesAsync(request.FileId, ct);
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
 
@@ -89,9 +80,8 @@ app.MapPost("/internal/works", async (
     })
     .WithName("CreateWorkInternal")
     .WithOpenApi().DisableAntiforgery();
-;
 
-// Получить отчёты по конкретной работе
+
 app.MapGet("/internal/works/{workId:guid}/reports", (Guid workId, IWorkStore store) =>
     {
         var reports = store.GetReportsForWork(workId).ToList();
@@ -122,9 +112,8 @@ app.MapGet("/internal/works/{workId:guid}/reports", (Guid workId, IWorkStore sto
     })
     .WithName("GetReportsForWorkInternal")
     .WithOpenApi().DisableAntiforgery();
-;
 
-// Сводка по заданию
+
 app.MapGet("/internal/assignments/{assignmentId}/reports", (string assignmentId, IWorkStore store) =>
     {
         var pairs = store.GetByAssignment(assignmentId).ToList();
@@ -141,11 +130,11 @@ app.MapGet("/internal/assignments/{assignmentId}/reports", (string assignmentId,
     })
     .WithName("GetAssignmentSummaryInternal")
     .WithOpenApi().DisableAntiforgery();
-;
+
 
 app.MapGet("/status", () => Results.Ok("Checker OK"))
     .WithName("Checkerstatus")
     .WithOpenApi().DisableAntiforgery();
-;
+
 
 app.Run();

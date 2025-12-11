@@ -56,7 +56,7 @@ app.MapPost("/internal/files", async (IFormFile file) =>
     })
     .WithName("UploadFileInternal")
     .WithOpenApi().DisableAntiforgery();
-;
+
 
 // Внутренний api: получить содержимое файла (для Checker)
 app.MapGet("/internal/files/{fileId}", async (string fileId) =>
@@ -72,11 +72,32 @@ app.MapGet("/internal/files/{fileId}", async (string fileId) =>
     })
     .WithName("GetFileInternal")
     .WithOpenApi().DisableAntiforgery();
-;
+
+// Только для отладки
+app.MapGet("/internal/FirstFile", async () =>
+    {
+        // Берём первый файл в папке
+        var firstFilePath = Directory
+            .EnumerateFiles(storageRoot, "*", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault();
+
+        if (firstFilePath is null)
+        {
+            return Results.NotFound("Нет файлов");
+        }
+
+        var bytes = await File.ReadAllBytesAsync(firstFilePath);
+
+        // Можно попробовать оставить text/plain, но по умолчанию:
+        return Results.File(bytes, "application/octet-stream", Path.GetFileName(firstFilePath));
+    })
+    .WithName("GetFirstFile")
+    .WithOpenApi()
+    .DisableAntiforgery();
+
 
 app.MapGet("/status", () => Results.Ok("FileStorage OK"))
-    .WithName("FileStoragestatus")
+    .WithName("FileStorageStatus")
     .WithOpenApi().DisableAntiforgery();
-;
 
 app.Run();
