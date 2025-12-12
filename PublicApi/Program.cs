@@ -26,7 +26,7 @@ builder.Services.AddSwaggerGen(c =>
         {
             Title = "HSEHomeworkChecker Public API",
             Version = "v2",
-            Description = "Шлюз: принимает запросы от клиентов и выполняет их через FileStorage и Checker"
+            Description = "Принимает запросы от клиентов и выполняет их через FileStorage и Checker"
         });
 });
 
