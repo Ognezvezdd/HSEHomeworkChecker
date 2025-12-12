@@ -170,7 +170,7 @@ namespace Checker
         private static string ComputeHash(byte[] bytes)
         {
             var hash = SHA256.HashData(bytes);
-            return Convert.ToHexString(hash); // удобная текстовая форма
+            return Convert.ToHexString(hash);
         }
     }
 }
