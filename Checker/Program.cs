@@ -18,11 +18,11 @@ builder.Services.AddSingleton<IPlagiarismDetector, PlagiarismDetector>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1",
+    c.SwaggerDoc("v2",
         new OpenApiInfo
         {
             Title = "HSEHomeworkChecker Checker",
-            Version = "v1",
+            Version = "v2",
             Description = "Микросервис проверки работ и формирования отчётов"
         });
 });

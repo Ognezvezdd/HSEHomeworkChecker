@@ -26,12 +26,12 @@ builder.Services.AddHttpClient<ICheckerApiClient, CheckerApiClient>(client =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1",
+    c.SwaggerDoc("v2",
         new OpenApiInfo
         {
             Title = "HSEHomeworkChecker Public API",
-            Version = "v1",
-            Description = "Шлюз: принимает запросы от клиентов и проксирует их в FileStorage и Checker"
+            Version = "v2",
+            Description = "Шлюз: принимает запросы от клиентов и выполняет их через FileStorage и Checker"
         });
 });
 
@@ -40,10 +40,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Public API v1");
-    });
+    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
