@@ -67,7 +67,6 @@ namespace PublicApi
         public Task<string> GetText(string workId, CancellationToken ct = default);
     }
 
-    /// <summary>Клиент файлового хранилища, умеющий загружать файлы и получать их текст.</summary>
     public interface IFileStorageApiClient : IFileGetTextClient
     {
         Task<string> UploadAsync(IFormFile file, CancellationToken ct = default);

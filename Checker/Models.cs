@@ -38,12 +38,10 @@ namespace Checker
     /// </summary>
     public class WorkEntity
     {
-        // Нужен для Dapper (параметрлес конструктор)
         public WorkEntity()
         {
         }
 
-        // Нужен для твоего кода в Program.cs (new WorkEntity(...))
         public WorkEntity(
             Guid workId,
             string studentId,
@@ -104,7 +102,6 @@ namespace Checker
         public DateTime CreatedAt { get; set; }
     }
 
-    /// <summary>Контракт хранилища работ и отчётов по проверке.</summary>
     public interface IWorkStore
     {
         WorkEntity AddWork(WorkEntity work);
