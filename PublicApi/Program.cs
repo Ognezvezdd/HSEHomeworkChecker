@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.OpenApi.Models;
 using PublicApi;
-using Microsoft.AspNetCore.WebUtilities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -202,57 +202,34 @@ app.MapGet("/api/assignments/{assignmentId}/reports", async (
     .WithOpenApi().DisableAntiforgery();
 
 
-app.MapGet("/api/works/{workId:guid}/wordCloud", async (
-        Guid workId,
+app.MapGet("/api/files/{fileId}/wordCloud", async (
+        string fileId,
         IFileStorageApiClient storageClient,
         IHttpClientFactory httpClientFactory,
         CancellationToken ct) =>
     {
-        try
+        var text = await storageClient.GetText(fileId, ct);
+        if (string.IsNullOrWhiteSpace(text))
         {
-            var reports = await storageClient.GetText(workId, ct);
-            if (reports.Length == 0)
-            {
-                return Results.NotFound();
-            }
-
-            var text = string.Join(" ", reports);
-
-            var queryParams = new Dictionary<string, string?>
-            {
-                ["text"] = text,
-                ["format"] = "png",
-            };
-
-            var url = QueryHelpers.AddQueryString("https://quickchart.io/", queryParams);
-            var httpClient = httpClientFactory.CreateClient("chart");
-
-            var response = await httpClient.GetAsync(url, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                return Results.Problem(
-                    title: "Не удалось получить картинку от QuickChart",
-                    detail: $"Status code: {(int)response.StatusCode}",
-                    statusCode: StatusCodes.Status502BadGateway);
-            }
-
-            var imageBytes = await response.Content.ReadAsByteArrayAsync(ct);
-
-            return Results.File(imageBytes, "image/png");
+            return Results.NotFound();
         }
-        catch (HttpRequestException)
+
+        var queryParams = new Dictionary<string, string?> { ["text"] = text, ["format"] = "png" };
+
+        var url = QueryHelpers.AddQueryString("https://quickchart.io/wordcloud", queryParams);
+        var httpClient = httpClientFactory.CreateClient("chart");
+
+        var response = await httpClient.GetAsync(url, ct);
+        if (!response.IsSuccessStatusCode)
         {
             return Results.Problem(
-                title: "Сервис проверки временно недоступен",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+                title: "Не удалось получить картинку от QuickChart",
+                detail: $"Status code: {(int)response.StatusCode}",
+                statusCode: StatusCodes.Status502BadGateway);
         }
-        catch (Exception ex)
-        {
-            return Results.Problem(
-                title: $"Внутренняя ошибка PublicApi при выполнении команды /api/works/{workId}/wordCloud",
-                detail: ex.Message,
-                statusCode: StatusCodes.Status500InternalServerError);
-        }
+
+        var imageBytes = await response.Content.ReadAsByteArrayAsync(ct);
+        return Results.File(imageBytes, "image/png");
     })
     .WithName("WordCloud")
     .WithSummary("Выдает картинку по самым частым словам")

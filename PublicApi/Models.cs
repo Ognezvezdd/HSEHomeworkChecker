@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 
 namespace PublicApi
@@ -69,7 +70,7 @@ namespace PublicApi
 
     public interface IFileGetTextClient
     {
-        public Task<string> GetText(Guid workId, CancellationToken ct = default);
+        public Task<string> GetText(string workId, CancellationToken ct = default);
     }
 
     public interface IFileStorageApiClient : IFileGetTextClient
@@ -110,17 +111,24 @@ namespace PublicApi
             throw new InvalidOperationException("fileId not found in response");
         }
 
-        public async Task<string> GetText(Guid fileId, CancellationToken ct = default)
+        public async Task<string> GetText(string fileId, CancellationToken ct = default)
         {
-            var file = fileId.ToString("N");
-            using var content = new MultipartFormDataContent(file);
-            var response = await _http.PostAsync("/internal/files", content, ct);
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                throw new InvalidOperationException($"FileStorage returned {(int)response.StatusCode}");
-            }
+                var response = await _http.GetAsync($"/internal/files/{fileId}", ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"FileStorage returned {(int)response.StatusCode}");
+                }
 
-            return response.ToString();
+                var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+
+                return Encoding.UTF8.GetString(bytes);
+            }
+            catch (Exception ex)
+            {
+                throw new FileNotFoundException($"Не нашел файл: {ex.Message}");
+            }
         }
     }
 

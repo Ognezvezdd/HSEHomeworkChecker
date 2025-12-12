@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 
 namespace Checker
 {
-    public abstract record CreateWorkRequest(
+    public record CreateWorkRequest(
         string StudentId,
         string StudentName,
         string AssignmentId,
