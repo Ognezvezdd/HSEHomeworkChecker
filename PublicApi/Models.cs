@@ -101,22 +101,21 @@ namespace PublicApi
 
         public async Task<string> GetText(string fileId, CancellationToken ct = default)
         {
-            try
-            {
-                var response = await http.GetAsync($"/internal/files/{fileId}", ct);
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new InvalidOperationException($"FileStorage returned {(int)response.StatusCode}");
-                }
+            var response = await http.GetAsync($"/internal/files/{fileId}", ct);
 
-                var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-
-                return Encoding.UTF8.GetString(bytes);
-            }
-            catch (Exception ex)
+            if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                throw new FileNotFoundException($"Не нашел файл: {ex.Message}");
+                throw new FileNotFoundException($"Файл с id '{fileId}' не найден в FileStorage");
             }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(
+                    $"FileStorage returned {response.StatusCode} {response.ReasonPhrase}");
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+            return Encoding.UTF8.GetString(bytes);
         }
     }
 
@@ -208,7 +207,7 @@ namespace PublicApi
     /// <summary>Модель формы для загрузки работы через multipart/form-data.</summary>
     public sealed class UploadWorkForm
     {
-        public IFormFile File { get; set; } = null!;
+        public IFormFile? File { get; set; } = null;
 
         public string StudentId { get; set; } = string.Empty;
 

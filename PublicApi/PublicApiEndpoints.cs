@@ -18,7 +18,7 @@ namespace PublicApi
         /// <param name="ct">Токен отмены запроса.</param>
         /// <returns>
         /// 200 OK с <see cref="PublicCreateWorkResponse"/> при успешной отправке работы,
-        /// 400 BadRequest при пустом файле, 503 или 500 при ошибках внутренних сервисов.
+        /// 400 BadRequest при отсутствии/пустом файле, 503 или 500 при ошибках внутренних сервисов.
         /// </returns>
         public static async Task<IResult> SubmitWorkAsync(
             [FromForm] UploadWorkForm form,
@@ -27,6 +27,11 @@ namespace PublicApi
             CancellationToken ct)
         {
             var file = form.File;
+
+            if (file is null)
+            {
+                return Results.BadRequest("File is required");
+            }
 
             if (file.Length == 0)
             {
