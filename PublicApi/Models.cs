@@ -51,12 +51,6 @@ namespace PublicApi
         int PlagiarismScore,
         DateTime CreatedAt);
 
-    public record FileTextDto(
-        Guid WorkId,
-        string FileId,
-        string FileText
-    );
-
     public record AssignmentSummaryDto(
         string AssignmentId,
         int TotalWorks,
@@ -64,7 +58,7 @@ namespace PublicApi
 
     public interface IFileGetTextClient
     {
-        public Task<string> GetText(string workId, CancellationToken ct = default);
+        public Task<string> GetText(string fileId, CancellationToken ct = default);
     }
 
     public interface IFileStorageApiClient : IFileGetTextClient
@@ -118,7 +112,6 @@ namespace PublicApi
         }
     }
 
-    /// <summary>Клиент сервиса Checker для создания работ и получения отчётов.</summary>
     /// <summary>Клиент сервиса Checker для создания работ и получения отчётов.</summary>
     public interface ICheckerApiClient
     {

@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<FormOptions>(opt =>
 {
-    opt.MultipartBodyLengthLimit = 1024L * 1024L * 100; // 100 MB
+    opt.MultipartBodyLengthLimit = 100L * 1024 * 1024;
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -27,8 +27,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
-app.UseHttpsRedirection();
 
 var storageRoot = Path.Combine(AppContext.BaseDirectory, "work_storage");
 Directory.CreateDirectory(storageRoot);
@@ -67,6 +65,7 @@ app.MapGet("/internal/files/{fileId}", async (string fileId) =>
     .WithName("GetFileInternal")
     .WithOpenApi().DisableAntiforgery();
 
+// Отладочный internal GET
 app.MapGet("/internal/FirstFile", async () =>
     {
         var firstFilePath = Directory

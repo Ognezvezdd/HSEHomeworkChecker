@@ -38,8 +38,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
-
 app.MapPost("/api/works/submit", PublicApiEndpoints.SubmitWorkAsync)
     .WithName("UploadWork")
     .WithSummary("Отправить работу на проверку")
