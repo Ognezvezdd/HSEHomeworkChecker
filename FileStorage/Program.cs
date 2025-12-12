@@ -13,11 +13,11 @@ builder.Services.Configure<FormOptions>(opt =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1",
+    c.SwaggerDoc("v2",
         new OpenApiInfo
         {
             Title = "HSEHomeworkChecker File Storage",
-            Version = "v1",
+            Version = "v2",
             Description = "Микросервис хранения файлов (работ студентов)"
         });
 });

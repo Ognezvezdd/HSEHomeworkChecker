@@ -208,28 +208,44 @@ app.MapGet("/api/files/{fileId}/wordCloud", async (
         IHttpClientFactory httpClientFactory,
         CancellationToken ct) =>
     {
-        var text = await storageClient.GetText(fileId, ct);
-        if (string.IsNullOrWhiteSpace(text))
+        try
         {
-            return Results.NotFound();
+            var text = await storageClient.GetText(fileId, ct);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return Results.NotFound();
+            }
+
+            var queryParams = new Dictionary<string, string?> { ["text"] = text, ["format"] = "png" };
+
+            var url = QueryHelpers.AddQueryString("https://quickchart.io/wordcloud", queryParams);
+            var httpClient = httpClientFactory.CreateClient("chart");
+
+            var response = await httpClient.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return Results.Problem(
+                    title: "Не удалось получить картинку от QuickChart",
+                    detail: $"Status code: {(int)response.StatusCode}",
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+
+            var imageBytes = await response.Content.ReadAsByteArrayAsync(ct);
+            return Results.File(imageBytes, "image/png");
         }
-
-        var queryParams = new Dictionary<string, string?> { ["text"] = text, ["format"] = "png" };
-
-        var url = QueryHelpers.AddQueryString("https://quickchart.io/wordcloud", queryParams);
-        var httpClient = httpClientFactory.CreateClient("chart");
-
-        var response = await httpClient.GetAsync(url, ct);
-        if (!response.IsSuccessStatusCode)
+        catch (HttpRequestException)
         {
             return Results.Problem(
-                title: "Не удалось получить картинку от QuickChart",
-                detail: $"Status code: {(int)response.StatusCode}",
-                statusCode: StatusCodes.Status502BadGateway);
+                title: "Сервис временно недоступен",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
         }
-
-        var imageBytes = await response.Content.ReadAsByteArrayAsync(ct);
-        return Results.File(imageBytes, "image/png");
+        catch (Exception ex)
+        {
+            return Results.Problem(
+                title: $"Внутренняя ошибка PublicApi при выполнении команды /api/files/{fileId}/wordCloud",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
     })
     .WithName("WordCloud")
     .WithSummary("Выдает картинку по самым частым словам")
