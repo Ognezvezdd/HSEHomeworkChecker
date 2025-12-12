@@ -32,7 +32,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // Простое файловое хранилище в папке ./storage
-// TODO: Поменять на S3
 var storageRoot = Path.Combine(AppContext.BaseDirectory, "work_storage");
 Directory.CreateDirectory(storageRoot);
 
