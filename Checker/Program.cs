@@ -8,7 +8,6 @@ var fileStorageUrl = builder.Configuration["FILESTORAGE_URL"]
                      ?? throw new InvalidOperationException("Добавьте FILESTORAGE_URL в appsettings.Development.json");
 
 // === НАСТРОЙКА SQLite ===
-// Файл БД будет лежать рядом с приложением: checker.db
 var dbPath = Path.Combine(AppContext.BaseDirectory, "checker.db");
 var connectionString = $"Data Source={dbPath}";
 
