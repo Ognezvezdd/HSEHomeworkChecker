@@ -8,15 +8,15 @@
 
 ## Общая идея
 
-Система проверяет студенческие работы на плагиат и хранит результаты.
+Система принимает студенческие работы, сохраняет их, проверяет на плагиат и отдаёт отчёты/сводки преподавателю.
 
 Архитектура микросервисов:
 
-- FileStorage - хранение и выдача файлов работ.
-- Checker - анализ работ, определение плагиата, хранение отчётов и статистики.
-- PublicApi - единая точка входа для клиента (студент / преподаватель), отправляет запросы через FileStorage и Checker.
+- **FileStorage** - отвечает только за хранение и выдачу файлов работ.
+- **Checker** - отвечает за анализ работ на плагиат и хранение фактов сдачи/отчётов в СУБД.
+- **PublicApi** - единая точка входа для клиентов (студент / преподаватель), маршрутизирует запросы в FileStorage и Checker, а также строит облако слов по тексту работы.
 
-Каждый сервис - отдельное ASP.NET Core Minimal API с включённым Swagger.
+Каждый сервис — отдельный ASP.NET Core Minimal API с включённым Swagger.
 
 ---
 
@@ -24,6 +24,7 @@
 
 - .NET 8 SDK
 - Swashbuckle.AspNetCore (Swagger)
+- Dapper + Microsoft.Data.Sqlite (СУБД внутри Checker)
 - Docker и Docker Compose
 
 ---
@@ -32,46 +33,48 @@
 
 В корне:
 
-- docker-compose.yml - поднятие всех микросервисов одной командой.
-- FileStorage/ - микросервис хранения файлов.
-- Checker/ - микросервис анализа и отчётов.
-- PublicApi/ - шлюз для внешних запросов.
+- `docker-compose.yml` — поднятие всех микросервисов одной командой.
+- `FileStorage/` — микросервис хранения файлов.
+- `Checker/` — микросервис анализа и отчётов (с SQLite-базой).
+- `PublicApi/` — шлюз для внешних запросов.
 
 ### FileStorage
 
-- FileStorage.csproj
-- Dockerfile
-- Program.cs - минимальный API:
+- `FileStorage.csproj`
+- `Dockerfile`
+- `Program.cs` — Minimal API:
     - Swagger;
-    - загрузка файла и выдача файла по его идентификатору.
+    - загрузка файла (`POST /internal/files`);
+    - выдача файла по идентификатору (`GET /internal/files/{fileId}`).
 
-Файлы хранятся в локальной папке `work_storage` внутри контейнера (in-memory в смысле метаданных отсутствует - хранилище
-файлов файловое, без явного СУБД).
+Файлы хранятся в локальной папке `work_storage` внутри контейнера (простое файловое хранилище без S7).
 
 ### Checker
 
-- Checker.csproj
-- Dockerfile
-- Program.cs - минимальный API:
+- `Checker.csproj`
+- `Dockerfile`
+- `Program.cs` — Minimal API:
     - Swagger;
-    - HttpClient для доступа к FileStorage;
-    - in-memory хранилище работ и отчётов (IWorkStore);
-    - сервис определения плагиата (IPlagiarismDetector).
+    - `HttpClient` для доступа к FileStorage;
+    - `IWorkStore` с реализацией `SqliteWorkStore` (SQLite + Dapper);
+    - сервис определения плагиата `IPlagiarismDetector`.
 
-Checker получает байты файла из FileStorage, вычисляет хеш, находит совпадения по заданию и сохраняет отчёт в памяти.
+Checker получает байты файла из FileStorage, считает SHA-256 хеш, ищет совпадения по тому же заданию и другому студенту, сохраняет факт сдачи работы и отчёт о проверке в SQLite (таблицы `Works` и `Reports`).
 
 ### PublicApi
 
-- PublicApi.csproj
-- Dockerfile
-- Program.cs - API Gateway:
+- `PublicApi.csproj`
+- `Dockerfile`
+- `Program.cs` — API Gateway:
     - Swagger;
-    - HttpClient к FileStorage и Checker;
-    - публичные HTTP-методы для студентов и преподавателей;
-    - вспомогательный вызов QuickChart для построения облака слов.
+    - `HttpClient` к FileStorage и Checker;
+    - публичный endpoint для студента: `POST /api/works/submit` (загрузка работы и запуск проверки);
+    - публичные endpoint’ы для преподавателя:
+        - `GET /api/works/{workId}/reports` — отчёты по конкретной работе;
+        - `GET /api/assignments/{assignmentId}/reports` — сводка по заданию;
+    - `GET /api/files/{fileId}/wordCloud` — запрос к QuickChart для визуализации работы в виде облака слов.
 
-Все обращения внешнего клиента идут только через PublicApi.
-
+Все внешние запросы идут только в PublicApi; прямого доступа к FileStorage и Checker снаружи нет.
 ---
 
 ## Публичные HTTP-методы (PublicApi)
