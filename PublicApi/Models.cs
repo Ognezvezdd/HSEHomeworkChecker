@@ -5,14 +5,14 @@ using System.Text.Json;
 
 namespace PublicApi
 {
-// === DTO для Public API ===
-
+    /// <summary>Ответ публичного API при загрузке работы.</summary>
     public record PublicCreateWorkResponse(
         Guid WorkId,
         Guid ReportId,
         bool IsPlagiarism,
         string FileId);
 
+    /// <summary>DTO отчёта о проверке работы для публичного API.</summary>
     public record PublicWorkReportDto(
         Guid ReportId,
         Guid WorkId,
@@ -28,9 +28,6 @@ namespace PublicApi
         string AssignmentId,
         int TotalWorks,
         int PlagiarisedCount);
-
-
-// === Контракты внутренних сервисов (Checker) ===
 
     public record CreateWorkRequest(
         string StudentId,
@@ -65,29 +62,20 @@ namespace PublicApi
         int TotalWorks,
         int PlagiarisedCount);
 
-
-// === Клиенты внутренних сервисов ===
-
     public interface IFileGetTextClient
     {
         public Task<string> GetText(string workId, CancellationToken ct = default);
     }
 
+    /// <summary>Клиент файлового хранилища, умеющий загружать файлы и получать их текст.</summary>
     public interface IFileStorageApiClient : IFileGetTextClient
     {
         Task<string> UploadAsync(IFormFile file, CancellationToken ct = default);
     }
 
-
-    public sealed class FileStorageApiClient : IFileStorageApiClient
+    /// <summary>HTTP-клиент для обращения к микросервису FileStorage.</summary>
+    public sealed class FileStorageApiClient(HttpClient http) : IFileStorageApiClient
     {
-        private readonly HttpClient _http;
-
-        public FileStorageApiClient(HttpClient http)
-        {
-            _http = http;
-        }
-
         public async Task<string> UploadAsync(IFormFile file, CancellationToken ct = default)
         {
             using var content = new MultipartFormDataContent();
@@ -95,7 +83,7 @@ namespace PublicApi
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
             content.Add(fileContent, "file", file.FileName);
 
-            var response = await _http.PostAsync("/internal/files", content, ct);
+            var response = await http.PostAsync("/internal/files", content, ct);
             if (!response.IsSuccessStatusCode)
             {
                 throw new InvalidOperationException($"FileStorage returned {(int)response.StatusCode}");
@@ -115,7 +103,7 @@ namespace PublicApi
         {
             try
             {
-                var response = await _http.GetAsync($"/internal/files/{fileId}", ct);
+                var response = await http.GetAsync($"/internal/files/{fileId}", ct);
                 if (!response.IsSuccessStatusCode)
                 {
                     throw new InvalidOperationException($"FileStorage returned {(int)response.StatusCode}");
@@ -132,6 +120,7 @@ namespace PublicApi
         }
     }
 
+    /// <summary>Клиент сервиса Checker для создания работ и получения отчётов.</summary>
     public interface ICheckerApiClient
     {
         Task<CreateWorkResponse> CreateWorkAsync(CreateWorkRequest request, CancellationToken ct = default);
@@ -139,18 +128,11 @@ namespace PublicApi
         Task<AssignmentSummaryDto?> GetAssignmentSummaryAsync(string assignmentId, CancellationToken ct = default);
     }
 
-    public sealed class CheckerApiClient : ICheckerApiClient
+    public sealed class CheckerApiClient(HttpClient http) : ICheckerApiClient
     {
-        private readonly HttpClient _http;
-
-        public CheckerApiClient(HttpClient http)
-        {
-            _http = http;
-        }
-
         public async Task<CreateWorkResponse> CreateWorkAsync(CreateWorkRequest request, CancellationToken ct = default)
         {
-            var response = await _http.PostAsJsonAsync("/internal/works", request, ct);
+            var response = await http.PostAsJsonAsync("/internal/works", request, ct);
             if (!response.IsSuccessStatusCode)
             {
                 throw new InvalidOperationException($"Checker returned {(int)response.StatusCode}");
@@ -162,7 +144,7 @@ namespace PublicApi
 
         public async Task<List<WorkReportDto>> GetReportsForWorkAsync(Guid workId, CancellationToken ct = default)
         {
-            var response = await _http.GetAsync($"/internal/works/{workId}/reports", ct);
+            var response = await http.GetAsync($"/internal/works/{workId}/reports", ct);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 return new List<WorkReportDto>();
@@ -180,7 +162,7 @@ namespace PublicApi
         public async Task<AssignmentSummaryDto?> GetAssignmentSummaryAsync(string assignmentId,
             CancellationToken ct = default)
         {
-            var response = await _http.GetAsync($"/internal/assignments/{assignmentId}/reports", ct);
+            var response = await http.GetAsync($"/internal/assignments/{assignmentId}/reports", ct);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 return null;
@@ -196,7 +178,7 @@ namespace PublicApi
         }
     }
 
-// DTO для multipart/form-data
+    /// <summary>Модель формы для загрузки работы через multipart/form-data.</summary>
     public sealed class UploadWorkForm
     {
         public IFormFile File { get; set; } = null!;

@@ -3,12 +3,14 @@ using System.Security.Cryptography;
 
 namespace Checker
 {
+    /// <summary>Запрос на создание проверки работы студента.</summary>
     public record CreateWorkRequest(
         string StudentId,
         string StudentName,
         string AssignmentId,
         string FileId);
 
+    /// <summary>Результат создания работы и отчёта по проверке.</summary>
     public record CreateWorkResponse(
         Guid WorkId,
         Guid ReportId,
@@ -47,9 +49,7 @@ namespace Checker
         int PlagiarismScore,
         DateTime CreatedAt);
 
-
-// === Хранилище работ и отчётов ===
-
+    /// <summary>Контракт хранилища работ и отчётов по проверке.</summary>
     public interface IWorkStore
     {
         WorkEntity AddWork(WorkEntity work);
@@ -59,6 +59,7 @@ namespace Checker
         IEnumerable<(WorkEntity Work, ReportEntity Report)> GetByAssignment(string assignmentId);
     }
 
+    /// <summary>Потокобезопасное in-memory хранилище работ и отчётов.</summary>
     public sealed class InMemoryWorkStore : IWorkStore
     {
         private readonly ConcurrentDictionary<Guid, ReportEntity> _reports = new();
@@ -102,9 +103,6 @@ namespace Checker
         }
     }
 
-
-// === Клиент FileStorage ===
-
     public interface IFileStorageClient
     {
         Task<byte[]> GetFileBytesAsync(string fileId, CancellationToken ct = default);
@@ -124,9 +122,7 @@ namespace Checker
         }
     }
 
-
-// === Антиплагиат ===
-
+    /// <summary>Контракт сервиса проверки работ на плагиат.</summary>
     public interface IPlagiarismDetector
     {
         Task<(bool isPlagiarism, WorkEntity? sourceWork, int score)> AnalyzeAsync(
@@ -140,6 +136,7 @@ namespace Checker
 
     public sealed class PlagiarismDetector : IPlagiarismDetector
     {
+        /// <summary>Анализирует работу на плагиат в рамках задания и ищет исходную работу в хранилище.</summary>
         public async Task<(bool isPlagiarism, WorkEntity? sourceWork, int score)> AnalyzeAsync(
             string assignmentId,
             string studentId,

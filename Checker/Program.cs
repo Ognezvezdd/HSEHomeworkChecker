@@ -35,8 +35,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// === api Checker ===
-
 app.MapPost("/internal/works", async (
         CreateWorkRequest request,
         IFileStorageClient storageClient,
@@ -81,7 +79,6 @@ app.MapPost("/internal/works", async (
     .WithName("CreateWorkInternal")
     .WithOpenApi().DisableAntiforgery();
 
-
 app.MapGet("/internal/works/{workId:guid}/reports", (Guid workId, IWorkStore store) =>
     {
         var reports = store.GetReportsForWork(workId).ToList();
@@ -113,7 +110,6 @@ app.MapGet("/internal/works/{workId:guid}/reports", (Guid workId, IWorkStore sto
     .WithName("GetReportsForWorkInternal")
     .WithOpenApi().DisableAntiforgery();
 
-
 app.MapGet("/internal/assignments/{assignmentId}/reports", (string assignmentId, IWorkStore store) =>
     {
         var pairs = store.GetByAssignment(assignmentId).ToList();
@@ -131,10 +127,8 @@ app.MapGet("/internal/assignments/{assignmentId}/reports", (string assignmentId,
     .WithName("GetAssignmentSummaryInternal")
     .WithOpenApi().DisableAntiforgery();
 
-
 app.MapGet("/status", () => Results.Ok("Checker OK"))
     .WithName("CheckerStatus")
     .WithOpenApi().DisableAntiforgery();
-
 
 app.Run();
