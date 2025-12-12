@@ -32,22 +32,18 @@ namespace Checker
         int TotalWorks,
         int PlagiarisedCount);
 
-    public sealed class WorkEntity
+    /// <summary>
+    ///     Работа студента. Хранится в SQLite, маппится через Dapper.
+    ///     ВАЖНО: есть пустой конструктор + set-свойства, чтобы Dapper мог материализовать объект.
+    /// </summary>
+    public class WorkEntity
     {
-        public Guid WorkId { get; set; }
-        public string StudentId { get; set; } = null!;
-        public string StudentName { get; set; } = null!;
-        public string AssignmentId { get; set; } = null!;
-        public string FileId { get; set; } = null!;
-        public string FileHash { get; set; } = null!;
-        public DateTime CreatedAt { get; set; }
-
-        // Нужен Dapper'у
+        // Нужен для Dapper (параметрлес конструктор)
         public WorkEntity()
         {
         }
 
-        // Удобный конструктор для твоего кода
+        // Нужен для твоего кода в Program.cs (new WorkEntity(...))
         public WorkEntity(
             Guid workId,
             string studentId,
@@ -65,17 +61,21 @@ namespace Checker
             FileHash = fileHash;
             CreatedAt = createdAt;
         }
+
+        public Guid WorkId { get; set; }
+        public string StudentId { get; set; } = null!;
+        public string StudentName { get; set; } = null!;
+        public string AssignmentId { get; set; } = null!;
+        public string FileId { get; set; } = null!;
+        public string FileHash { get; set; } = null!;
+        public DateTime CreatedAt { get; set; }
     }
 
-    public sealed class ReportEntity
+    /// <summary>
+    ///     Отчёт по проверке работы. Хранится в SQLite, маппится через Dapper.
+    /// </summary>
+    public class ReportEntity
     {
-        public Guid ReportId { get; set; }
-        public Guid WorkId { get; set; }
-        public bool IsPlagiarism { get; set; }
-        public Guid? SourceWorkId { get; set; }
-        public int PlagiarismScore { get; set; }
-        public DateTime CreatedAt { get; set; }
-
         public ReportEntity()
         {
         }
@@ -95,6 +95,13 @@ namespace Checker
             PlagiarismScore = plagiarismScore;
             CreatedAt = createdAt;
         }
+
+        public Guid ReportId { get; set; }
+        public Guid WorkId { get; set; }
+        public bool IsPlagiarism { get; set; }
+        public Guid? SourceWorkId { get; set; }
+        public int PlagiarismScore { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
 
     /// <summary>Контракт хранилища работ и отчётов по проверке.</summary>
@@ -107,7 +114,9 @@ namespace Checker
         IEnumerable<(WorkEntity Work, ReportEntity Report)> GetByAssignment(string assignmentId);
     }
 
-    /// <summary>In-memory хранилище работ и отчётов (Заменено на СУБД, оставлено для тестов и безопасности)</summary>
+    // ===================== In-memory реализация (может не использоваться, но не ломает код) =====================
+
+    /// <summary>Потокобезопасное in-memory хранилище работ и отчётов.</summary>
     public sealed class InMemoryWorkStore : IWorkStore
     {
         private readonly ConcurrentDictionary<Guid, ReportEntity> _reports = new();

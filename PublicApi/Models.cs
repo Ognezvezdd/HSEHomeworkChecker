@@ -121,6 +121,7 @@ namespace PublicApi
     }
 
     /// <summary>Клиент сервиса Checker для создания работ и получения отчётов.</summary>
+    /// <summary>Клиент сервиса Checker для создания работ и получения отчётов.</summary>
     public interface ICheckerApiClient
     {
         Task<CreateWorkResponse> CreateWorkAsync(CreateWorkRequest request, CancellationToken ct = default);
@@ -128,53 +129,79 @@ namespace PublicApi
         Task<AssignmentSummaryDto?> GetAssignmentSummaryAsync(string assignmentId, CancellationToken ct = default);
     }
 
-    public sealed class CheckerApiClient(HttpClient http) : ICheckerApiClient
+    public sealed class CheckerApiClient : ICheckerApiClient
     {
+        private readonly HttpClient _http;
+
+        public CheckerApiClient(HttpClient http)
+        {
+            _http = http;
+        }
+
         public async Task<CreateWorkResponse> CreateWorkAsync(CreateWorkRequest request, CancellationToken ct = default)
         {
-            var response = await http.PostAsJsonAsync("/internal/works", request, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new InvalidOperationException($"Checker returned {(int)response.StatusCode}");
-            }
-
-            var dto = await response.Content.ReadFromJsonAsync<CreateWorkResponse>(ct);
-            return dto ?? throw new InvalidOperationException("Empty response from Checker");
+            var response = await _http.PostAsJsonAsync("/internal/works", request, ct);
+            return await ReadJsonOrThrow<CreateWorkResponse>(response, "POST /internal/works", ct);
         }
 
         public async Task<List<WorkReportDto>> GetReportsForWorkAsync(Guid workId, CancellationToken ct = default)
         {
-            var response = await http.GetAsync($"/internal/works/{workId}/reports", ct);
+            var response = await _http.GetAsync($"/internal/works/{workId}/reports", ct);
+
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 return new List<WorkReportDto>();
             }
 
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new InvalidOperationException($"Checker returned {(int)response.StatusCode}");
-            }
+            var list = await ReadJsonOrThrow<List<WorkReportDto>>(
+                response,
+                $"GET /internal/works/{workId}/reports",
+                ct);
 
-            var list = await response.Content.ReadFromJsonAsync<List<WorkReportDto>>(ct);
             return list ?? new List<WorkReportDto>();
         }
 
-        public async Task<AssignmentSummaryDto?> GetAssignmentSummaryAsync(string assignmentId,
+        public async Task<AssignmentSummaryDto?> GetAssignmentSummaryAsync(
+            string assignmentId,
             CancellationToken ct = default)
         {
-            var response = await http.GetAsync($"/internal/assignments/{assignmentId}/reports", ct);
+            var response = await _http.GetAsync($"/internal/assignments/{assignmentId}/reports", ct);
+
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 return null;
             }
 
+            var dto = await ReadJsonOrThrow<AssignmentSummaryDto>(
+                response,
+                $"GET /internal/assignments/{assignmentId}/reports",
+                ct);
+
+            return dto;
+        }
+
+        // Общий хелпер: если код не 2xx — читаем тело и кидаем нормальное исключение
+        private static async Task<T> ReadJsonOrThrow<T>(
+            HttpResponseMessage response,
+            string context,
+            CancellationToken ct)
+        {
             if (!response.IsSuccessStatusCode)
             {
-                throw new InvalidOperationException($"Checker returned {(int)response.StatusCode}");
+                var body = await response.Content.ReadAsStringAsync(ct);
+                var msg =
+                    $"Checker {context} failed: {(int)response.StatusCode} {response.ReasonPhrase}. Body: {body}";
+                throw new InvalidOperationException(msg);
             }
 
-            var dto = await response.Content.ReadFromJsonAsync<AssignmentSummaryDto>(ct);
-            return dto;
+            var result = await response.Content.ReadFromJsonAsync<T>(ct);
+            if (result is null)
+            {
+                throw new InvalidOperationException(
+                    $"Checker {context} returned 200, но тело пустое или не удалось десериализовать");
+            }
+
+            return result;
         }
     }
 

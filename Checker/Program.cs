@@ -7,9 +7,6 @@ var builder = WebApplication.CreateBuilder(args);
 var fileStorageUrl = builder.Configuration["FILESTORAGE_URL"]
                      ?? throw new InvalidOperationException("Добавьте FILESTORAGE_URL в appsettings.Development.json");
 
-// === НАСТРОЙКА SQLite ===
-var dbPath = Path.Combine(AppContext.BaseDirectory, "checker.db");
-var connectionString = $"Data Source={dbPath}";
 
 builder.Services.AddHttpClient<IFileStorageClient, FileStorageClient>(client =>
 {
@@ -17,8 +14,13 @@ builder.Services.AddHttpClient<IFileStorageClient, FileStorageClient>(client =>
 });
 
 // Хранилище работ и отчётов: SQLite + Dapper
-builder.Services.AddSingleton<IWorkStore>(_ => new SqliteWorkStore(connectionString));
-
+builder.Services.AddSingleton<IWorkStore>(_ =>
+{
+    // Можно вынести в конфиг, но для ДЗ достаточно файла в текущей папке
+    var dbPath = Path.Combine(AppContext.BaseDirectory, "checker.db");
+    var connString = $"Data Source={dbPath}";
+    return new SqliteWorkStore(connString);
+});
 builder.Services.AddSingleton<IPlagiarismDetector, PlagiarismDetector>();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -48,42 +50,53 @@ app.MapPost("/internal/works", async (
         IPlagiarismDetector detector,
         CancellationToken ct) =>
     {
-        var analyzeResult = await detector.AnalyzeAsync(
-            request.AssignmentId,
-            request.StudentId,
-            request.FileId,
-            storageClient,
-            store,
-            ct);
+        try
+        {
+            var analyzeResult = await detector.AnalyzeAsync(
+                request.AssignmentId,
+                request.StudentId,
+                request.FileId,
+                storageClient,
+                store,
+                ct);
 
-        var bytes = await storageClient.GetFileBytesAsync(request.FileId, ct);
-        var hash = Convert.ToHexString(SHA256.HashData(bytes));
+            var bytes = await storageClient.GetFileBytesAsync(request.FileId, ct);
+            var hash = Convert.ToHexString(SHA256.HashData(bytes));
 
-        var work = new WorkEntity(
-            Guid.NewGuid(),
-            request.StudentId,
-            request.StudentName,
-            request.AssignmentId,
-            request.FileId,
-            hash,
-            DateTime.UtcNow);
+            var work = new WorkEntity(
+                Guid.NewGuid(),
+                request.StudentId,
+                request.StudentName,
+                request.AssignmentId,
+                request.FileId,
+                hash,
+                DateTime.UtcNow);
 
-        store.AddWork(work);
+            store.AddWork(work);
 
-        var report = new ReportEntity(
-            Guid.NewGuid(),
-            work.WorkId,
-            analyzeResult.isPlagiarism,
-            analyzeResult.sourceWork?.WorkId,
-            analyzeResult.score,
-            DateTime.UtcNow);
+            var report = new ReportEntity(
+                Guid.NewGuid(),
+                work.WorkId,
+                analyzeResult.isPlagiarism,
+                analyzeResult.sourceWork?.WorkId,
+                analyzeResult.score,
+                DateTime.UtcNow);
 
-        store.AddReport(report);
+            store.AddReport(report);
 
-        return Results.Ok(new CreateWorkResponse(work.WorkId, report.ReportId, report.IsPlagiarism));
+            return Results.Ok(new CreateWorkResponse(work.WorkId, report.ReportId, report.IsPlagiarism));
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem(
+                title: "Checker failed to create work",
+                detail: ex.ToString(),
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
     })
     .WithName("CreateWorkInternal")
-    .WithOpenApi().DisableAntiforgery();
+    .WithOpenApi()
+    .DisableAntiforgery();
 
 app.MapGet("/internal/works/{workId:guid}/reports", (Guid workId, IWorkStore store) =>
     {
