@@ -7,12 +7,19 @@ var builder = WebApplication.CreateBuilder(args);
 var fileStorageUrl = builder.Configuration["FILESTORAGE_URL"]
                      ?? throw new InvalidOperationException("Добавьте FILESTORAGE_URL в appsettings.Development.json");
 
+// === НАСТРОЙКА SQLite ===
+// Файл БД будет лежать рядом с приложением: checker.db
+var dbPath = Path.Combine(AppContext.BaseDirectory, "checker.db");
+var connectionString = $"Data Source={dbPath}";
+
 builder.Services.AddHttpClient<IFileStorageClient, FileStorageClient>(client =>
 {
     client.BaseAddress = new Uri(fileStorageUrl);
 });
 
-builder.Services.AddSingleton<IWorkStore, InMemoryWorkStore>();
+// Хранилище работ и отчётов: SQLite + Dapper
+builder.Services.AddSingleton<IWorkStore>(_ => new SqliteWorkStore(connectionString));
+
 builder.Services.AddSingleton<IPlagiarismDetector, PlagiarismDetector>();
 
 builder.Services.AddEndpointsApiExplorer();

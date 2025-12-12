@@ -32,22 +32,70 @@ namespace Checker
         int TotalWorks,
         int PlagiarisedCount);
 
-    public record WorkEntity(
-        Guid WorkId,
-        string StudentId,
-        string StudentName,
-        string AssignmentId,
-        string FileId,
-        string FileHash,
-        DateTime CreatedAt);
+    public sealed class WorkEntity
+    {
+        public Guid WorkId { get; set; }
+        public string StudentId { get; set; } = null!;
+        public string StudentName { get; set; } = null!;
+        public string AssignmentId { get; set; } = null!;
+        public string FileId { get; set; } = null!;
+        public string FileHash { get; set; } = null!;
+        public DateTime CreatedAt { get; set; }
 
-    public record ReportEntity(
-        Guid ReportId,
-        Guid WorkId,
-        bool IsPlagiarism,
-        Guid? SourceWorkId,
-        int PlagiarismScore,
-        DateTime CreatedAt);
+        // Нужен Dapper'у
+        public WorkEntity()
+        {
+        }
+
+        // Удобный конструктор для твоего кода
+        public WorkEntity(
+            Guid workId,
+            string studentId,
+            string studentName,
+            string assignmentId,
+            string fileId,
+            string fileHash,
+            DateTime createdAt)
+        {
+            WorkId = workId;
+            StudentId = studentId;
+            StudentName = studentName;
+            AssignmentId = assignmentId;
+            FileId = fileId;
+            FileHash = fileHash;
+            CreatedAt = createdAt;
+        }
+    }
+
+    public sealed class ReportEntity
+    {
+        public Guid ReportId { get; set; }
+        public Guid WorkId { get; set; }
+        public bool IsPlagiarism { get; set; }
+        public Guid? SourceWorkId { get; set; }
+        public int PlagiarismScore { get; set; }
+        public DateTime CreatedAt { get; set; }
+
+        public ReportEntity()
+        {
+        }
+
+        public ReportEntity(
+            Guid reportId,
+            Guid workId,
+            bool isPlagiarism,
+            Guid? sourceWorkId,
+            int plagiarismScore,
+            DateTime createdAt)
+        {
+            ReportId = reportId;
+            WorkId = workId;
+            IsPlagiarism = isPlagiarism;
+            SourceWorkId = sourceWorkId;
+            PlagiarismScore = plagiarismScore;
+            CreatedAt = createdAt;
+        }
+    }
 
     /// <summary>Контракт хранилища работ и отчётов по проверке.</summary>
     public interface IWorkStore
@@ -59,7 +107,7 @@ namespace Checker
         IEnumerable<(WorkEntity Work, ReportEntity Report)> GetByAssignment(string assignmentId);
     }
 
-    /// <summary>Потокобезопасное in-memory хранилище работ и отчётов.</summary>
+    /// <summary>In-memory хранилище работ и отчётов (Заменено на СУБД, оставлено для тестов и безопасности)</summary>
     public sealed class InMemoryWorkStore : IWorkStore
     {
         private readonly ConcurrentDictionary<Guid, ReportEntity> _reports = new();
