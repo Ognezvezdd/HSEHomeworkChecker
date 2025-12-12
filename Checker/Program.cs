@@ -18,7 +18,7 @@ builder.Services.AddSingleton<IPlagiarismDetector, PlagiarismDetector>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v2",
+    c.SwaggerDoc("v1",
         new OpenApiInfo
         {
             Title = "HSEHomeworkChecker Checker",
