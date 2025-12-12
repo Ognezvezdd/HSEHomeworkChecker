@@ -133,7 +133,7 @@ app.MapGet("/internal/assignments/{assignmentId}/reports", (string assignmentId,
 
 
 app.MapGet("/status", () => Results.Ok("Checker OK"))
-    .WithName("Checkerstatus")
+    .WithName("CheckerStatus")
     .WithOpenApi().DisableAntiforgery();
 
 

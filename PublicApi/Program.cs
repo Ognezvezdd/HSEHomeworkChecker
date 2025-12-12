@@ -153,7 +153,7 @@ app.MapGet("/api/works/{workId:guid}/reports", async (
     .Produces(StatusCodes.Status503ServiceUnavailable)
     .Produces(StatusCodes.Status500InternalServerError)
     .WithOpenApi().DisableAntiforgery();
-;
+
 
 app.MapGet("/api/assignments/{assignmentId}/reports", async (
         string assignmentId,
